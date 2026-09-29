@@ -1,0 +1,15 @@
+# proprietarni firmware FlashForge - NEcommitovat (jen popsano v docs/)
+firmware-original/
+# RE mezivystupy (velke, generovatelne)
+strings.txt
+dwarf.txt
+# runtime artefakty serveru
+cloud/cert.pem
+cloud/key.pem
+cloud/requests.log
+cloud/snapshot.jpg
+cloud/status.json
+cloud/dnsmasq-ff.conf
+cloud/cmd.json
+# system
+.DS_Store
