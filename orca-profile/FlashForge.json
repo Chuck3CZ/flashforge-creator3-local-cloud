@@ -1,0 +1,54 @@
+{
+    "name": "FlashForge",
+    "version": "01.00.00.01",
+    "force_update": "0",
+    "description": "FlashForge printers (Creator 3 add-on for OrcaSlicer)",
+    "machine_model_list": [
+        {
+            "name": "FlashForge Creator 3",
+            "sub_path": "machine/FlashForge_Creator3_model.json"
+        }
+    ],
+    "process_list": [
+        {
+            "name": "0.10mm Fine @Creator3",
+            "sub_path": "process/0.10mm_Fine_Creator3.json"
+        },
+        {
+            "name": "0.20mm Standard @Creator3",
+            "sub_path": "process/0.20mm_Standard_Creator3.json"
+        },
+        {
+            "name": "0.30mm Draft @Creator3",
+            "sub_path": "process/0.30mm_Draft_Creator3.json"
+        }
+    ],
+    "filament_list": [
+        {
+            "name": "FlashForge Generic PLA @Creator3",
+            "sub_path": "filament/FlashForge_Generic_PLA_Creator3.json"
+        },
+        {
+            "name": "FlashForge Generic PETG @Creator3",
+            "sub_path": "filament/FlashForge_Generic_PETG_Creator3.json"
+        },
+        {
+            "name": "FlashForge Generic ABS @Creator3",
+            "sub_path": "filament/FlashForge_Generic_ABS_Creator3.json"
+        },
+        {
+            "name": "FlashForge Generic PVA (support) @Creator3",
+            "sub_path": "filament/FlashForge_Generic_PVA_Creator3.json"
+        }
+    ],
+    "machine_list": [
+        {
+            "name": "fdm_machine_common",
+            "sub_path": "machine/fdm_machine_common.json"
+        },
+        {
+            "name": "FlashForge Creator 3 0.4 nozzle",
+            "sub_path": "machine/FlashForge_Creator3.json"
+        }
+    ]
+}

@@ -1,0 +1,11 @@
+{
+    "type": "machine_model",
+    "name": "FlashForge Creator 3",
+    "nozzle_diameter": "0.4",
+    "machine_tech": "FFF",
+    "family": "FlashForge",
+    "bed_model": "flashforge_creator3_bed.stl",
+    "bed_texture": "flashforge_creator3_cover.png",
+    "default_materials": "FlashForge Generic PLA @Creator3;FlashForge Generic PETG @Creator3;FlashForge Generic ABS @Creator3;FlashForge Generic PVA (support) @Creator3",
+    "model_id": "flashforge_creator3"
+}
