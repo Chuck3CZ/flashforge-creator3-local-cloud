@@ -85,17 +85,35 @@ Creator 3 má **independent dual extruder** (IDEX). OrcaSlicer to řeší přes
 
 ### 4. Duplicate mode (dvě stejné kopie současně)
 
-OrcaSlicer stock to zatím **neumí** elegantně pro Creator 3 (jen pro
-Snapmaker J1 přes "Printer settings → Printable area → Duplicate mode").
-Workaround: slice jako single-extruder (T0), potom v `gx_converter.py`
-před spuštěním nastav environment proměnnou `GX_IDEX_MODE=duplicate`
-(TODO: v této verzi ještě není, přijde až budu mít referenční `.gx` ze
-stock FlashPrint 5 s duplicate módem — jeho start sekvence posílá
-specifický M-code, který neznám bez vzorku).
+OrcaSlicer stock to umí jen pro Snapmaker J1 přes plate name trigger
+(`"IDEXDupl"` nebo `"IDEXCopy"`), který vkládá `M605 S2 X162 R0` do
+start gcode. Creator 3 firmware tuto Marlin IDEX syntaxi
+pravděpodobně **nezná** — používá vlastní FlashForge sekvenci (odhadem
+řízenou přes `M605`/`M606` s jinými parametry nebo úplně jiný M-code).
+
+Dokud nebudu mít referenční `.gx` z FlashPrintu 5 v duplicate módu,
+duplicate z OrcaSlicer **nebude fungovat** přímo. Workaround: v Orca
+slicuj single-extruder (T0), v `.gcode` ručně přidej duplicate M-code
+na začátek (až ho budeme znát) a potom spusť `gx_converter.py`.
 
 ### 5. Mirror mode (zrcadlená kopie)
 
-Stejná situace jako duplicate — čeká na vzorek z FlashPrintu 5.
+Stejná situace jako duplicate — Snapmaker J1 syntaxe je `M605 S3`,
+ale Creator 3 ji nejspíš nezná. Čeká na vzorek z FlashPrintu 5.
+
+## Zdroje a credits
+
+Profil kombinuje tři zdroje:
+
+1. **Oficiální FlashForge Cura setup PDF** — bed, origin at center,
+   G-code flavor, extruder count. [PDF](https://en.fss.flashforge.com/10000/software/a42243ba68cb81dc8afd7b7fb3e71dcf.pdf).
+2. **[HellEvro/FF_Gcode_to_GX](https://github.com/HellEvro/FF_Gcode_to_GX)**
+   — bajt-level layout `.gx` headeru validovaný majitelem Creator 3 Pro
+   proti výstupu FlashPrintu 5, plus pracovní start gcode a pause gcode
+   (`M2000`). Můj `gx_converter.py` používá stejný layout.
+3. **Snapmaker J1 OrcaSlicer profil** — reference pro IDEX duplicate
+   (`M605 S2 X<offset> R0`) a mirror (`M605 S3`) módy. Creator 3 tuto
+   syntaxi pravděpodobně nezná, viz sekci níže.
 
 ## Co je ověřené proti oficiálnímu FlashForge Cura setupu
 
@@ -108,13 +126,17 @@ for Flashforge Creator 3/Creator 3 Pro"* (en.fss.flashforge.com, PDF):
 - **G-code flavor:** Marlin
 - **Material:** 1.75 mm
 - **Nozzle offset:** 0,0 (offset řeší firmware)
-- **Start gcode:** `G90` / `G1 Z50 F420` (zvedne lože dolů = Z nahoru)
-  / `M651 S255` (FlashForge M-code pro zapnutí LED komory)
+- **Start gcode:** kombinace oficiálního Cura PDF a validovaného
+  Creator 3 Pro start gcode z HellEvro repa — začíná `M118 X150 Y125
+  Z200 T<n>` (border info pro firmware), potom `M140`/`G28`/`G1 Z15`
+  pro ohřev a sjezd lože, selekce extruderu, `M109`, LED zapnutí
+  přes `M651 S255`.
 - **End gcode:** `M104 S0` / `M140 S0` / `G162 Z F1800`
   (FlashForge-specifický home Z na maximum) / `M652` (LED off) /
   `G91` / `M18`
+- **Pause:** `M2000` (FlashForge-specifický, ne standardní `M601`)
 - **Extruder select:** `M108 T0` nebo `M108 T1` (FlashForge-specifický,
-  musí předcházet standardnímu `T0`/`T1`)
+  předchází standardnímu `T0`/`T1` při change-filament)
 
 ### Pozor: oficiální FlashForge přiznání
 

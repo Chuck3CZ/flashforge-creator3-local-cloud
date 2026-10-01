@@ -33,6 +33,8 @@ from pathlib import Path
 
 MAGIC = b"xgcode 1.0\n\0"  # 12 bytes
 HEADER_LEN = 58
+BMP_OFFSET = 58
+GCODE_OFFSET = 14512  # 58 (header) + 14454 (BMP file size)
 
 # BMP 80x60 24bpp, solid dark grey. 80*60*3 = 14400 bytes pixel data,
 # padded per 4-byte row (80*3 = 240 is already 4-aligned), + 54-byte BMP
@@ -164,50 +166,59 @@ def extract_metadata(gcode_text: str) -> dict[str, int]:
     return md
 
 
-def detect_extruder_usage(gcode_text: str) -> int:
-    """Return the printer's extruder-usage flag.
-
-    0 = right only, 1 = left only, 2 = both (dual-head print), 3 = both
-    cooperatively (merge). FlashPrint uses this to pre-warm nozzles and
-    pick the correct toolhead parking strategy.
-    """
+def detect_dual(gcode_text: str, md: dict[str, int]) -> bool:
+    """A job is dual-material if the gcode toggles between T0 and T1, or
+    if OrcaSlicer reported non-zero filament for both extruders."""
+    if md.get("filament_mm_1", 0) > 0 and md.get("filament_mm_0", 0) > 0:
+        return True
     uses_t0 = re.search(r"^\s*T0\b", gcode_text, flags=re.M) is not None
     uses_t1 = re.search(r"^\s*T1\b", gcode_text, flags=re.M) is not None
-    if uses_t0 and uses_t1:
-        return 2
-    if uses_t1:
-        return 1
-    return 0
+    return uses_t0 and uses_t1
 
 
-def build_header(
-    md: dict[str, int],
-    thumbnail_offset: int,
-    gcode_offset: int,
-    extruder_usage: int,
-) -> bytes:
+def build_header(md: dict[str, int], is_dual: bool) -> bytes:
     """Pack the 58-byte .gx header.
 
-    Field order follows FlashPrint 5 output. Any field the printer rejects
-    silently is left at a conservative default rather than zero (the Creator
-    3 firmware refuses jobs with zero print_time in some builds)."""
+    Layout verified against the HellEvro/FF_Gcode_to_GX reference, which
+    the Creator 3 Pro owner validated against FlashPrint 5 output:
+
+        bytes  0..11 : magic "xgcode 1.0\\n\\0"
+        bytes 12..15 : zero / unknown
+        bytes 16..19 : BMP offset (= 58)
+        bytes 20..23 : gcode offset (= 14512)
+        bytes 24..27 : gcode offset (duplicate)
+        bytes 28..31 : print time, seconds (int32, min 1)
+        bytes 32..35 : filament used, right extruder, mm (int32)
+        bytes 36..39 : filament used, left extruder, mm (int32)
+        bytes 40..41 : multi-extruder type (int16; 0=single, 1=dual)
+        bytes 42..43 : layer height, micrometres (int16)
+        bytes 44..45 : reserved (int16, 0)
+        bytes 46..47 : perimeter shells (int16)
+        bytes 48..49 : print speed (int16)
+        bytes 50..51 : bed temp (int16)
+        bytes 52..53 : nozzle temp, right (int16)
+        bytes 54..55 : nozzle temp, left (int16)
+        bytes 56..57 : reserved (int16, always 1 per reference)
+    """
+    multi = 1 if is_dual else 0
     hdr = bytearray(HEADER_LEN)
     hdr[0:12] = MAGIC
-
-    struct.pack_into("<I", hdr, 12, thumbnail_offset)
-    struct.pack_into("<I", hdr, 16, gcode_offset)
-    struct.pack_into("<I", hdr, 20, gcode_offset)
-    struct.pack_into("<I", hdr, 24, max(md["print_time"], 1))
-    struct.pack_into("<I", hdr, 28, md["filament_mm_0"])
-    struct.pack_into("<I", hdr, 32, md["filament_mm_1"])
-    struct.pack_into("<H", hdr, 36, 1 if extruder_usage >= 2 else 0)
-    struct.pack_into("<H", hdr, 38, md["layer_height_um"])
-    struct.pack_into("<H", hdr, 40, md["shells"])
-    struct.pack_into("<H", hdr, 42, md["print_speed"])
-    struct.pack_into("<H", hdr, 44, md["bed_temp"])
-    struct.pack_into("<H", hdr, 46, md["nozzle_temp_0"])
-    struct.pack_into("<H", hdr, 48, md["nozzle_temp_1"])
-    hdr[50] = extruder_usage & 0xFF
+    struct.pack_into("<i", hdr, 12, 0)
+    struct.pack_into("<i", hdr, 16, BMP_OFFSET)
+    struct.pack_into("<i", hdr, 20, GCODE_OFFSET)
+    struct.pack_into("<i", hdr, 24, GCODE_OFFSET)
+    struct.pack_into("<i", hdr, 28, max(md["print_time"], 1))
+    struct.pack_into("<i", hdr, 32, md["filament_mm_0"])
+    struct.pack_into("<i", hdr, 36, md["filament_mm_1"] if is_dual else 0)
+    struct.pack_into("<h", hdr, 40, multi)
+    struct.pack_into("<h", hdr, 42, md["layer_height_um"])
+    struct.pack_into("<h", hdr, 44, 0)
+    struct.pack_into("<h", hdr, 46, md["shells"])
+    struct.pack_into("<h", hdr, 48, md["print_speed"])
+    struct.pack_into("<h", hdr, 50, md["bed_temp"])
+    struct.pack_into("<h", hdr, 52, md["nozzle_temp_0"])
+    struct.pack_into("<h", hdr, 54, md["nozzle_temp_1"] if is_dual else 0)
+    struct.pack_into("<h", hdr, 56, 1)
     return bytes(hdr)
 
 
@@ -219,12 +230,9 @@ def convert(gcode_path: Path, gx_path: Path | None = None, keep_gcode: bool = Tr
         gcode_text = gcode_bytes.decode("latin-1", errors="replace")
 
     md = extract_metadata(gcode_text)
-    extruder_usage = detect_extruder_usage(gcode_text)
+    is_dual = detect_dual(gcode_text, md)
     thumbnail = build_placeholder_bmp()
-
-    thumbnail_offset = HEADER_LEN
-    gcode_offset = thumbnail_offset + len(thumbnail)
-    header = build_header(md, thumbnail_offset, gcode_offset, extruder_usage)
+    header = build_header(md, is_dual)
 
     out = gx_path or gcode_path.with_suffix(".gx")
     with out.open("wb") as f:
