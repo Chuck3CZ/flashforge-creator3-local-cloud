@@ -83,23 +83,54 @@ Creator 3 má **independent dual extruder** (IDEX). OrcaSlicer to řeší přes
 - Flush volumes jsou v profilu nastavené na 140 mm³ (konzervativní,
   u čistých barev stačí 80, přechod bílá→černá chce 200+).
 
-### 4. Duplicate mode (dvě stejné kopie současně)
+### 4. Replica / Duplicate mode a 5. Mirror mode
 
-OrcaSlicer stock to umí jen pro Snapmaker J1 přes plate name trigger
-(`"IDEXDupl"` nebo `"IDEXCopy"`), který vkládá `M605 S2 X162 R0` do
-start gcode. Creator 3 firmware tuto Marlin IDEX syntaxi
-pravděpodobně **nezná** — používá vlastní FlashForge sekvenci (odhadem
-řízenou přes `M605`/`M606` s jinými parametry nebo úplně jiný M-code).
+**Reverse-engineering firmwaru** (`creator3-arm` v1.4.8, `control_run`
+v4.2.3) ukázal, že Creator 3 **nemá žádný M-code** pro mirror /
+replica / duplicate (žádné `M605` jako Snapmaker J1 ani vlastní
+FlashForge varianta). Jsou to **host-level koncepty** — FlashPrint 5
+pro každý mode generuje jiný gcode:
 
-Dokud nebudu mít referenční `.gx` z FlashPrintu 5 v duplicate módu,
-duplicate z OrcaSlicer **nebude fungovat** přímo. Workaround: v Orca
-slicuj single-extruder (T0), v `.gcode` ručně přidej duplicate M-code
-na začátek (až ho budeme znát) a potom spusť `gx_converter.py`.
+| print_mode (enum) | Co to je | Jak to vzniká |
+|---|---|---|
+| 0 = Right | jen pravá hlava | single-extruder gcode s T0 |
+| 1 = Mirror | zrcadlené dvě kopie | gcode programově zrcadlí X pohyby druhé hlavy |
+| 2 = Replica | dvě identické kopie vedle sebe | gcode duplikuje pohyby s X offsetem |
+| 3 = Left | jen levá hlava | single-extruder gcode s T1 |
+| 4 = Double | dva materiály / dual-color | standardní dual-material gcode s toolchanges |
 
-### 5. Mirror mode (zrcadlená kopie)
+Firmware tyto hodnoty používá jen jako **UI label** (třída
+`ShowTFCard::getPrintMode(print_mode)` v creator3-arm vrací string
+`"Right"`/`"Mirror"`/`"Replica"`/`"Left"`/`"Double"`) a jako
+**persistentní state** v `/data/PowerOff` (klíč `PrintMode:` ve
+třídě `CPowerSavingModeFile`, pro power-loss recovery). V gcode
+headeru ani v komentářích Creator 3 **print_mode neočekává** — jen
+jede, co dostane.
 
-Stejná situace jako duplicate — Snapmaker J1 syntaxe je `M605 S3`,
-ale Creator 3 ji nejspíš nezná. Čeká na vzorek z FlashPrintu 5.
+**Praktické důsledky pro OrcaSlicer:**
+
+- **Mody 0, 3, 4** (Right / Left / Double) jdou přes standardní IDEX
+  cestu v Orcе: vyber extruder u objektů, OrcaSlicer vygeneruje
+  správný T0/T1 gcode a toolchange sekvence, prime tower pro
+  dual-color. Toto funguje tak, jak je profil nastaven teď.
+
+- **Mody 1, 2** (Mirror / Replica) vyžadují **post-processing**, který
+  do gcode pro jednu hlavu přidá paralelně zrcadlený / duplikovaný
+  gcode pro druhou. Stock OrcaSlicer to pro Creator 3 neumí (umí jen
+  pro Snapmaker J1 přes plate-name trigger, ale ten vkládá `M605`,
+  který Creator 3 ignoruje). Řešení = napsat další post-processing
+  script, který po `gx_converter.py` nebo před ním transformuje
+  single-head gcode na mirror/replica — v této verzi profilu to ještě
+  není. Zatím to řeš nativně ve FlashPrintu 5 pro ty 2 módy.
+
+### Jak je ověřený `M118` border info ve start gcode
+
+Firmware v `BuildPrint::getPrintFileParam()` **přímo parsuje**
+`M118 X<n> Y<n> Z<n> T<n>` ze startu gcode a validuje proti rozměrům
+tiskárny (300 × 250 × 200). Pokud chybí nebo rozměry přesahují,
+tiskárna hlásí `"X axis size exceeding standard"` apod. Proto je
+tento řádek v `machine_start_gcode` nezbytný — není to kosmetika,
+je to firmware kontrola.
 
 ## Zdroje a credits
 
