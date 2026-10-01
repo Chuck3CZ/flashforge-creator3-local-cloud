@@ -97,21 +97,56 @@ specifický M-code, který neznám bez vzorku).
 
 Stejná situace jako duplicate — čeká na vzorek z FlashPrintu 5.
 
+## Co je ověřené proti oficiálnímu FlashForge Cura setupu
+
+Hodnoty v tomto profilu jsou sladěné s oficiálním návodem *"Cura Setup
+for Flashforge Creator 3/Creator 3 Pro"* (en.fss.flashforge.com, PDF):
+
+- **Bed:** 300×250×200, origin at CENTER (souřadnice -150…+150 v X,
+  -125…+125 v Y). Pozor, start gcode používá záporné souřadnice —
+  pokud by firmware odmítal, ověřit v displeji tiskárny.
+- **G-code flavor:** Marlin
+- **Material:** 1.75 mm
+- **Nozzle offset:** 0,0 (offset řeší firmware)
+- **Start gcode:** `G90` / `G1 Z50 F420` (zvedne lože dolů = Z nahoru)
+  / `M651 S255` (FlashForge M-code pro zapnutí LED komory)
+- **End gcode:** `M104 S0` / `M140 S0` / `G162 Z F1800`
+  (FlashForge-specifický home Z na maximum) / `M652` (LED off) /
+  `G91` / `M18`
+- **Extruder select:** `M108 T0` nebo `M108 T1` (FlashForge-specifický,
+  musí předcházet standardnímu `T0`/`T1`)
+
+### Pozor: oficiální FlashForge přiznání
+
+> *"Note: Cura currently does not support slicing files for dual extruder
+> printers. The Extruder 1 on Machine Settings window refers to the right
+> extruder."*
+
+To znamená, že **oficiální Cura setup umí jen single-extruder tisk**
+(buď levá, nebo pravá hlava, ne obě zároveň). Dual-material je exkluzivita
+FlashPrintu 5.
+
+OrcaSlicer má lepší IDEX podporu než Cura (díky Snapmaker J1), takže
+dual-material by měl v OrcaSlicer teoreticky fungovat, ale je to
+**experimentální** a chce test. Pokud dual-material selhává, přepni se
+na single-material a vyber si levou nebo pravou hlavu — to funguje
+spolehlivě.
+
 ## Co ještě chybí
 
-- **Reálný start/end G-code z FlashPrintu 5.** Současné sekvence v
-  `machine_start_gcode` / `machine_end_gcode` jsou generické Marlin
-  šablony. Fungovat budou, ale FlashPrint 5 dělá na začátku pár
-  specifických věcí (priming obou trysek najednou, parkování T1 vlevo,
-  nastavení offsetu Z při aktivaci druhé hlavy). Pošli mi jeden
-  jednoduchý `.gx` z FlashPrintu 5 (nejlíp **dual-head kostka 20×20×20
-  mm** v PLA) a já z něj vytáhnu přesné sekvence.
+- **Reálný dual-head start/end G-code z FlashPrintu 5.** Pokud chceš
+  tisknout dvěma materiály najednou, FlashPrint má specifickou start
+  sekvenci pro priming obou trysek a parkování neaktivní hlavy. Pošli
+  mi jeden `.gx` z FlashPrintu 5 (dual-head kostka 20×20×20 mm v PLA)
+  a vytáhnu z něj přesné sekvence pro OrcaSlicer.
+- **Duplicate / mirror mód** — stock OrcaSlicer to umí jen pro Snapmaker
+  J1 a chce specifický M-code na začátku. Z reference `.gx` bych vytáhl
+  i tohle.
 - **Bed model `.stl`** a texture `.png` — kosmetika pro náhled v Orca.
 - **Nozzle X-offset** pro IDEX. Teď je `extruder_offset = [0x0, 0x0]`,
-  což OrcaSlicer bere jako "ovládá to firmware" (což Creator 3 dělá).
-  Pokud by druhá hlava tiskla s posunem, nastavit zde skutečný offset
-  (typicky ~155 mm pro IDEX s rozpětím 300 mm, ale přesně to řeknou
-  jen tvoje kalibrační testy).
+  což OrcaSlicer bere jako "ovládá to firmware". Pokud by druhá hlava
+  tiskla s posunem, nastavit zde skutečný offset podle kalibračních
+  testů.
 
 ## Testování
 
