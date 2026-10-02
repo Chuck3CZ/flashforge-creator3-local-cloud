@@ -5,7 +5,7 @@
     "instantiation": "true",
     "inherits": "0.20mm Standard @Creator3",
     "compatible_printers": [
-        "FlashForge Creator 3"
+        "FlashForge Creator 3 0.4 nozzle"
     ],
     "layer_height": "0.3",
     "initial_layer_print_height": "0.3",

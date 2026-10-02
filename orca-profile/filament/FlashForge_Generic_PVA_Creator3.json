@@ -18,7 +18,7 @@
         "1"
     ],
     "compatible_printers": [
-        "FlashForge Creator 3"
+        "FlashForge Creator 3 0.4 nozzle"
     ],
     "nozzle_temperature_initial_layer": [
         "210"

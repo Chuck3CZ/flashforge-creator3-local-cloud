@@ -5,7 +5,7 @@
     "instantiation": "true",
     "inherits": "fdm_process_common",
     "compatible_printers": [
-        "FlashForge Creator 3"
+        "FlashForge Creator 3 0.4 nozzle"
     ],
     "layer_height": "0.2",
     "initial_layer_print_height": "0.25",

@@ -1,6 +1,6 @@
 {
     "type": "machine",
-    "name": "FlashForge Creator 3",
+    "name": "FlashForge Creator 3 0.4 nozzle",
     "from": "system",
     "instantiation": "true",
     "inherits": "fdm_machine_common",

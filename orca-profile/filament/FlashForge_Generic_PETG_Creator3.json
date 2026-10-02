@@ -3,13 +3,13 @@
     "name": "FlashForge Generic PETG @Creator3",
     "from": "system",
     "instantiation": "true",
-    "inherits": "fdm_filament_petg",
+    "inherits": "Flashforge Generic PETG",
     "filament_id": "GFG99-C3",
     "filament_vendor": [
         "FlashForge"
     ],
     "compatible_printers": [
-        "FlashForge Creator 3"
+        "FlashForge Creator 3 0.4 nozzle"
     ],
     "nozzle_temperature_initial_layer": [
         "240"
