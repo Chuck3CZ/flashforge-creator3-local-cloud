@@ -235,16 +235,29 @@ double?*
 | 3 | **Left**    | single-extruder gcode with T1 |
 | 4 | **Double**  | standard dual-material with toolchanges |
 
-**Where it is NOT:** the motion controller binary has zero
-mirror/replica/duplicate/idex strings; there is no `M605` or FlashForge
-variant that switches modes. `BuildPrint::getPrintFileParam()` doesn't
-read any `print_mode` field from the `.gx` either.
+**How the printer picks the mode** (`BuildPrint::getPrintFileParam()`,
+`0x9c450`, verified by disassembly and reproduced by
+`firmware_print_mode()` in `gx_converter.py`): it scans the first **500
+lines** of the gcode.
 
-**Where it IS:** `/data/PowerOff` on the printer, written by
-`FILESNAMESPACE::CPowerSavingModeFile::setPowerSavingMode(PrintContinueConfig)`.
-That's a power-loss recovery state file, not a configuration source.
-`PrintMode:` is set by UI selection on the touchscreen before a print
-starts, which matches Path A above.
+- Every `M104 S<t> T0` / `M104 S<t> T1` line overwrites that nozzle's
+  temperature – the **last** one in the window wins.
+- right > 0 and left > 0 → **Double (4)**; right only → **Right (0)**;
+  left only → **Left (3)**; neither → *"Lack of extruder temperature"*.
+- `M118 … D<n>` forces the mode: the line is split on an upper-case `D`
+  and the last part is parsed as an int (1 Mirror, 2 Replica, 3 Left,
+  4 Double; 0 = automatic). **Never put an upper-case `D` in a comment
+  on the `M118` line.**
+
+That is why `machine_start_gcode` emits exactly one `M104` per nozzle,
+with the real temperature for every extruder the job uses
+(`is_extruder_used[n]`). Heating only the first extruder makes a
+two-colour job start in Left/Right mode. `gx_converter.py` also patches
+this as a safety net (every tool selected with `M108 Tn` gets a non-zero
+start temperature).
+
+`/data/PowerOff` (written by `CPowerSavingModeFile::setPowerSavingMode`)
+only stores the mode for power-loss recovery.
 
 **What the firmware does enforce:** `M118 X<n> Y<n> Z<n> T<n>` at the
 top of the gcode. The parser validates X/Y/Z against the 300/250/200

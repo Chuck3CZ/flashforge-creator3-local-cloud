@@ -393,6 +393,60 @@ def normalize_gcode(text: str) -> str:
     return "\n".join(out) + "\n"
 
 
+def firmware_print_mode(text: str) -> int:
+    """Emulate BuildPrint::getPrintFileParam() of creator3-arm 1.4.8:
+    within the first 500 lines the LAST `M104 S<t> T0/T1` wins per tool;
+    `M118 ... D<n>` forces the mode. Returns 0 Right, 1 Mirror, 2 Replica,
+    3 Left, 4 Double, -1 = "Lack of extruder temperature"."""
+    temps = {0: 0, 1: 0}
+    forced = 0
+    for line in text.splitlines()[:500]:
+        if "M118" in line and "D" in line:
+            try:
+                forced = int(line.split("D")[-1].strip())
+            except ValueError:
+                forced = 0
+        if "M104" in line:
+            m = re.search(r"\bS(\d+)", line)
+            for t in (0, 1):
+                if "T%d" % t in line and m:
+                    temps[t] = int(m.group(1))
+    if forced:
+        return forced
+    if temps[0] > 0:
+        return 4 if temps[1] > 0 else 0
+    return 3 if temps[1] > 0 else -1
+
+
+def ensure_tool_temps(text: str) -> str:
+    """Safety net: every tool the job selects (`M108 Tn`) must have a
+    non-zero `M104` within the first 500 lines, otherwise the printer picks
+    the wrong IDEX mode (e.g. Left for a two-colour job)."""
+    used = {int(t) for t in re.findall(r"(?m)^\s*M108 T([01])\b", text)}
+    if not used:
+        return text
+    temps = [int(x) for x in re.findall(
+        r";\s*nozzle_temperature_initial_layer\s*=\s*(\d+)\s*,\s*(\d+)", text)[0]] \
+        if re.search(r";\s*nozzle_temperature_initial_layer\s*=\s*\d+\s*,\s*\d+", text) else [210, 210]
+    lines = text.split("\n")
+    for t in used:
+        last = None
+        for i, l in enumerate(lines[:500]):
+            if "M104" in l and "T%d" % t in l:
+                last = i
+        cur = re.search(r"\bS(\d+)", lines[last]).group(1) if last is not None else "0"
+        if int(cur) > 0:
+            continue
+        fixed = "M104 S%d T%d" % (temps[t] or 210, t)
+        if last is not None:
+            lines[last] = fixed
+        else:
+            m118 = next((i for i, l in enumerate(lines) if l.startswith("M118")), 0)
+            lines.insert(m118 + 1, fixed)
+        print(f"fixed missing start temperature for T{t}", file=sys.stderr)
+    return "\n".join(lines)
+
+
 def convert(gcode_path: Path, gx_path: Path | None = None, keep_gcode: bool = True) -> Path:
     gcode_bytes = gcode_path.read_bytes()
     try:
@@ -403,7 +457,7 @@ def convert(gcode_path: Path, gx_path: Path | None = None, keep_gcode: bool = Tr
     thumb = thumbnail_bmp_from_gcode(gcode_text)
 
     if os.environ.get("GX_NORMALIZE", "1") != "0":
-        gcode_text = normalize_gcode(gcode_text)
+        gcode_text = ensure_tool_temps(normalize_gcode(gcode_text))
         gcode_bytes = gcode_text.encode("utf-8")
 
     md = extract_metadata(gcode_text)
