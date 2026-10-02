@@ -303,6 +303,29 @@ Switch to Path A (touchscreen mode selection) and open an issue with
 a short sample gcode. The interleave strategy in `idex_mirror.py` is
 untested on real hardware.
 
+**macOS says OrcaSlicer "is damaged and can't be opened" after install.**
+`install_macos.sh` writes into `OrcaSlicer.app`, which invalidates
+Apple's code signature, so Gatekeeper flags the bundle. Clear it with
+`xattr -dr com.apple.quarantine /Applications/OrcaSlicer.app` (this
+weakens Gatekeeper for that app — your call). Note bundle installs are
+also wiped on every OrcaSlicer update; re-run the installer afterwards.
+
+## Verified against FlashPrint 5
+
+The printer / start / end G-code here was cross-checked against stock
+**FlashPrint 5** output (`ffslicer 2.4.4`) for a calibration cube on
+both heads. Key facts that shaped the profile:
+
+- **Absolute extrusion** (`use_relative_e_distances = 0`, no `G92 E0`
+  per layer). FlashForge's own slicer emits monotonically increasing
+  `E` values — relative E + a layer-wise `G92 E0` is *wrong* here.
+- **Tool numbers are reversed vs. intuition:** right nozzle = `T0`,
+  left nozzle = `T1` (matches the `print_mode` table above and the
+  reference gcode, where the left-head file heats/waits on `T1`).
+- Start sequence uses FlashForge waits `M7 T0` (bed) and `M6 T<n>`
+  (active nozzle); no `G28` — the firmware homes itself at print start.
+- End sequence `G162 Z` (platform down) + `M652` + `M18`.
+
 ## License
 
 MIT, same as the parent repo. FlashForge trademarks and firmware
