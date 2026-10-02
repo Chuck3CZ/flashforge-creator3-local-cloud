@@ -314,7 +314,8 @@ def build_header(md: dict[str, int], used: set[int]) -> bytes:
         bytes 50..51 : bed temp (int16)
         bytes 52..53 : nozzle temp, right (int16)
         bytes 54..55 : nozzle temp, left (int16)
-        bytes 56..57 : reserved (int16, always 1 per reference)
+        byte  56     : right nozzle used (0/1)
+        byte  57     : left nozzle used (0/1)
     """
     multi = 1 if len(used) > 1 else 0
     # per FlashForge tool: value of the Orca extruder mapped to it, 0 if unused
@@ -337,7 +338,13 @@ def build_header(md: dict[str, int], used: set[int]) -> bytes:
     struct.pack_into("<h", hdr, 50, md["bed_temp"])
     struct.pack_into("<h", hdr, 52, tmp[0])   # right = T0
     struct.pack_into("<h", hdr, 54, tmp[1])   # left  = T1
-    struct.pack_into("<h", hdr, 56, 1)
+    # bytes 56/57: per-nozzle "used" flags (right, left). creator3-arm copies
+    # them in getPrintFileParam (memcpy hdr+56 -> BuildPrint+220, 2 bytes);
+    # in Double mode equal flags show "Double Color Print", different ones
+    # "super print" (translated "Ultra mode"). Single-right = 01 00, which is
+    # the "always 1" seen in single-extruder FlashPrint files.
+    hdr[56] = 1 if 0 in used else 0
+    hdr[57] = 1 if 1 in used else 0
     return bytes(hdr)
 
 

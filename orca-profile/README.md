@@ -256,6 +256,14 @@ two-colour job start in Left/Right mode. `gx_converter.py` also patches
 this as a safety net (every tool selected with `M108 Tn` gets a non-zero
 start temperature).
 
+The label under the preview comes from `.gx` header **bytes 56/57**
+(copied by `getPrintFileParam`, `memcpy(hdr+56 → BuildPrint+220, 2)`).
+In Double mode equal bytes show *"Double Color Print"*, different bytes
+*"super print"* – translated **"Ultra mode"**. `gx_converter.py` writes
+them as per-nozzle "used" flags (56 = right, 57 = left), so a two-colour
+job gets `01 01`. The label is cosmetic; the mode itself comes from the
+temperatures above.
+
 `/data/PowerOff` (written by `CPowerSavingModeFile::setPowerSavingMode`)
 only stores the mode for power-loss recovery.
 
