@@ -1,225 +1,261 @@
-# FlashForge Creator 3 — OrcaSlicer profile
+# OrcaSlicer profile for FlashForge Creator 3
 
-OrcaSlicer sám o sobě **nemá** profil pro FlashForge Creator 3 a existující
-Orca-Flashforge fork taky ne (podporuje Adventurer-řadu a AD5X). Tenhle
-balík přidá:
+Everything you need to slice for the **FlashForge Creator 3** (and Creator 3
+Pro) in **OrcaSlicer** on **macOS or Windows** — profiles, a `.gx`
+converter, and IDEX mirror / replica post-processors.
 
-- machine profile (300×250×200 mm, IDEX, dvě 0.4 trysky)
-- generické filament profily (PLA, PETG, ABS, PVA pro supporty)
-- tři process profily (0.10 / 0.20 / 0.30 mm)
-- post-processing skript `gx_converter.py`, který převede `.gcode` z Orcy
-  do `.gx` binárního formátu, který tiskárna umí tisknout z USB/SD a který
-  umí přijmout tvůj [lokální cloud](https://github.com/Chuck3CZ/flashforge-creator3-local-cloud)
+Stock OrcaSlicer has no Creator 3 profile and the official
+Orca-Flashforge fork only covers the Adventurer family and AD5X.
+This add-on fills that gap without forking OrcaSlicer or writing a
+plugin — OrcaSlicer has no plugin API, so vendor extensions are the
+right shape here.
 
-## Instalace (macOS)
+> **Works on macOS and Windows the same way.** Profiles are plain JSON
+> (OS-agnostic). The post-processing scripts are Python 3 (bundled with
+> macOS; on Windows install Python 3.10+ from python.org and tick "Add
+> to PATH"). Only the installer differs: `install_macos.sh` for Mac,
+> `install_windows.ps1` for Windows.
+
+Credits and layout references:
+
+- [HellEvro/FF_Gcode_to_GX](https://github.com/HellEvro/FF_Gcode_to_GX) —
+  validated 58-byte `.gx` header against FlashPrint 5 output on a real
+  Creator 3 Pro
+- [Official FlashForge Cura Setup PDF](https://en.fss.flashforge.com/10000/software/a42243ba68cb81dc8afd7b7fb3e71dcf.pdf) —
+  bed geometry, start/end gcode, nozzle offsets
+- IDEX mode semantics confirmed by reverse-engineering the
+  `creator3-arm` firmware binary (see "How IDEX actually works" below)
+
+## Contents
+
+1. [What you get](#what-you-get)
+2. [Install on macOS](#install-on-macos)
+3. [Install on Windows](#install-on-windows)
+4. [Add the printer in OrcaSlicer](#add-the-printer-in-orcaslicer)
+5. [Wire up the `.gx` converter](#wire-up-the-gx-converter)
+6. [Printing on left / right / dual-material](#printing-on-left--right--dual-material)
+7. [Mirror and replica (IDEX modes 1 and 2)](#mirror-and-replica-idex-modes-1-and-2)
+8. [How IDEX actually works on Creator 3 (RE findings)](#how-idex-actually-works-on-creator-3-re-findings)
+9. [What's inside this folder](#whats-inside-this-folder)
+10. [Troubleshooting](#troubleshooting)
+
+## What you get
+
+- Printer profile `FlashForge Creator 3` — 300×250×200 mm bed with
+  centre-origin coordinates, dual 0.4 mm IDEX nozzles, FlashForge start /
+  end / pause G-code with `M118` border info, `M651/M652` chamber LED and
+  `G162` Z-home.
+- Four filament presets: PLA, PETG, ABS, PVA (soluble support).
+- Three process presets: 0.10 mm Fine, 0.20 mm Standard, 0.30 mm Draft.
+  Prime tower is on by default (needed for dual-material).
+- `gx_converter.py` — turns OrcaSlicer's `.gcode` output into FlashForge
+  `.gx` (58-byte header + 80×60 BMP + gcode). Header layout matches
+  FlashPrint 5 byte-for-byte; validated against the HellEvro reference.
+- `idex_mirror.py` — rewrites single-head gcode into **mirror** or
+  **replica** motion for the second head when you don't want to pick
+  the mode on the printer's touchscreen.
+- Installers that back up any existing FlashForge profiles before they
+  overwrite them.
+
+## Install on macOS
+
+Prereqs: OrcaSlicer installed in `/Applications/OrcaSlicer.app`
+(download from [SoftFever releases](https://github.com/SoftFever/OrcaSlicer/releases)).
 
 ```bash
-cd ~/creator3-mod/orca-profile
+git clone https://github.com/Chuck3CZ/flashforge-creator3-local-cloud.git
+cd flashforge-creator3-local-cloud/orca-profile
 ./scripts/install_macos.sh
 ```
 
-Skript nakopíruje `FlashForge.json` a adresář `FlashForge/` do
-`/Applications/OrcaSlicer.app/Contents/Resources/profiles/`. Případné
-existující soubory zazálohuje s příponou `.bak-YYYYMMDD-HHMMSS`. Po
-instalaci OrcaSlicer restartuj.
+The installer asks for `sudo` once (OrcaSlicer's bundled profiles live
+inside the `.app`), backs up any existing `FlashForge.json` /
+`FlashForge/` with a timestamped suffix, and prints the next steps.
 
-Odinstalace: `./scripts/install_macos.sh --uninstall`.
+Rerun after each OrcaSlicer update — bundled profiles are replaced on
+update. `./scripts/install_macos.sh --uninstall` removes it.
 
-Po update OrcaSlicer je potřeba instalaci spustit znovu — bundled profily
-se při update přepíšou.
+Dry run: `./scripts/install_macos.sh --dry-run`.
 
-## Instalace (Windows)
+## Install on Windows
 
-Nemám k dispozici Windows, ale postup je ekvivalentní:
+Prereqs: OrcaSlicer in its default `C:\Program Files\OrcaSlicer\`
+(or pass `-OrcaRoot <path>`), and Python 3.10+ from
+[python.org](https://www.python.org/downloads/windows/) with "Add to
+PATH" ticked.
 
-1. Zavři OrcaSlicer.
-2. Zkopíruj `FlashForge.json` do
-   `C:\Program Files\OrcaSlicer\resources\profiles\`.
-3. Zkopíruj adresář `FlashForge/` (s `machine/`, `process/`, `filament/`)
-   do stejné cesty.
-4. Spusť OrcaSlicer znovu.
+```powershell
+git clone https://github.com/Chuck3CZ/flashforge-creator3-local-cloud.git
+cd flashforge-creator3-local-cloud\orca-profile
 
-## Zapnutí post-processingu
+# One-time: allow this script to run in this session
+Set-ExecutionPolicy -Scope Process Bypass
 
-OrcaSlicer → **Settings → Others → Post-processing scripts**:
-
-```
-python3 "/Users/Martin/creator3-mod/orca-profile/scripts/gx_converter.py"
+# Elevated PowerShell (Program Files write)
+.\scripts\install_windows.ps1
 ```
 
-OrcaSlicer po sliceování automaticky zavolá skript, předá mu cestu
-k `.gcode` souboru a výsledkem bude `.gx` soubor ve stejném adresáři.
-Původní `.gcode` zůstane pro inspekci; chceš-li ho smazat, nastav v shellu
-`GX_KEEP_GCODE=0`.
+Uninstall: `.\scripts\install_windows.ps1 -Uninstall`. Dry run:
+`.\scripts\install_windows.ps1 -DryRun`.
 
-Pokud používáš dashboard z lokálního cloudu, `.gx` nahraj přes jeho
-upload endpoint nebo prostě na SD kartu / přes `scp` na tiskárnu.
+## Add the printer in OrcaSlicer
 
-## IDEX režimy — tisk na levé / pravé hlavě
+Restart OrcaSlicer, then:
 
-Creator 3 má **independent dual extruder** (IDEX). OrcaSlicer to řeší přes
-"Extruder" picker u jednotlivých objektů / modifikátorů:
+1. **Settings → Printers → + Add printer**
+2. Vendor **FlashForge** → **Creator 3** → nozzle **0.4 mm** → **Add**
+3. On the first wizard step keep the FlashForge Generic PLA/PETG/ABS
+   presets ticked.
 
-### 1. Pouze pravá hlava (T0)
+The printer shows up in the top-left dropdown as *FlashForge Creator 3
+0.4 nozzle*. Pick one of the three process presets (0.10/0.20/0.30 mm).
 
-- V levém panelu klikni na objekt → **Objects → Extruder → 1**.
-- Prime tower zapnutý není potřeba, ale neuškodí (nižší risk zaschnutí
-  druhé trysky).
-- Po slice export → `.gx` → **detect_extruder_usage()** v konvertoru
-  nastaví flag na 0 → tiskárna předehřeje jen T0.
+## Wire up the `.gx` converter
 
-### 2. Pouze levá hlava (T1)
+OrcaSlicer exports `.gcode` by default. The Creator 3 wants `.gx` (binary
+header + thumbnail + gcode). Add the converter as a post-processing step:
 
-- Objekt → **Extruder → 2** (OrcaSlicer indexuje od 1, tzn. 2 = T1).
-- Konvertor nastaví flag na 1.
+**Settings → Others → Post-processing scripts:**
 
-### 3. Dva filamenty / barvy (dual-head)
+- **macOS**
+  ```
+  python3 "/Users/<you>/flashforge-creator3-local-cloud/orca-profile/scripts/gx_converter.py"
+  ```
+- **Windows**
+  ```
+  python "C:\Users\<you>\flashforge-creator3-local-cloud\orca-profile\scripts\gx_converter.py"
+  ```
 
-- V horní liště **"Add Filament"** přidej druhý filament (např. PLA
-  černý + PLA bílý).
-- Na každý objekt / modifikátor přiřaď filament 1 nebo 2.
-- Prime tower **musí být zapnutý** (`enable_prime_tower = 1`, defaultně
-  je, 35 mm široký ve standardním procesu).
-- Flush volumes jsou v profilu nastavené na 140 mm³ (konzervativní,
-  u čistých barev stačí 80, přechod bílá→černá chce 200+).
+OrcaSlicer appends the output `.gcode` path for you; the converter
+writes a sibling `.gx` and leaves the `.gcode` behind for inspection.
+Set `GX_KEEP_GCODE=0` in your shell to delete the `.gcode` after
+conversion.
 
-### 4. Replica / Duplicate mode a 5. Mirror mode
+Upload the `.gx` to the printer however you already do: SD card, your
+own [local cloud](https://github.com/Chuck3CZ/flashforge-creator3-local-cloud)
+dashboard, or `scp` to the printer.
 
-**Reverse-engineering firmwaru** (`creator3-arm` v1.4.8, `control_run`
-v4.2.3) ukázal, že Creator 3 **nemá žádný M-code** pro mirror /
-replica / duplicate (žádné `M605` jako Snapmaker J1 ani vlastní
-FlashForge varianta). Jsou to **host-level koncepty** — FlashPrint 5
-pro každý mode generuje jiný gcode:
+## Printing on left / right / dual-material
 
-| print_mode (enum) | Co to je | Jak to vzniká |
+OrcaSlicer indexes extruders from 1. In this profile:
+
+| Orca "Extruder" | Firmware tool | Head |
 |---|---|---|
-| 0 = Right | jen pravá hlava | single-extruder gcode s T0 |
-| 1 = Mirror | zrcadlené dvě kopie | gcode programově zrcadlí X pohyby druhé hlavy |
-| 2 = Replica | dvě identické kopie vedle sebe | gcode duplikuje pohyby s X offsetem |
-| 3 = Left | jen levá hlava | single-extruder gcode s T1 |
-| 4 = Double | dva materiály / dual-color | standardní dual-material gcode s toolchanges |
+| 1 | T0 | **Right** head |
+| 2 | T1 | **Left** head |
 
-Firmware tyto hodnoty používá jen jako **UI label** (třída
-`ShowTFCard::getPrintMode(print_mode)` v creator3-arm vrací string
-`"Right"`/`"Mirror"`/`"Replica"`/`"Left"`/`"Double"`) a jako
-**persistentní state** v `/data/PowerOff` (klíč `PrintMode:` ve
-třídě `CPowerSavingModeFile`, pro power-loss recovery). V gcode
-headeru ani v komentářích Creator 3 **print_mode neočekává** — jen
-jede, co dostane.
+### Right head only (print_mode = 0)
 
-**Praktické důsledky pro OrcaSlicer:**
+- Click the object → **Objects panel → Extruder → 1**.
+- Slice as usual. The converter sets the `.gx` header to single-head
+  so the printer preheats only T0.
 
-- **Mody 0, 3, 4** (Right / Left / Double) jdou přes standardní IDEX
-  cestu v Orcе: vyber extruder u objektů, OrcaSlicer vygeneruje
-  správný T0/T1 gcode a toolchange sekvence, prime tower pro
-  dual-color. Toto funguje tak, jak je profil nastaven teď.
+### Left head only (print_mode = 3)
 
-- **Mody 1, 2** (Mirror / Replica) vyžadují **post-processing**, který
-  do gcode pro jednu hlavu přidá paralelně zrcadlený / duplikovaný
-  gcode pro druhou. Stock OrcaSlicer to pro Creator 3 neumí (umí jen
-  pro Snapmaker J1 přes plate-name trigger, ale ten vkládá `M605`,
-  který Creator 3 ignoruje). Řešení = napsat další post-processing
-  script, který po `gx_converter.py` nebo před ním transformuje
-  single-head gcode na mirror/replica — v této verzi profilu to ještě
-  není. Zatím to řeš nativně ve FlashPrintu 5 pro ty 2 módy.
+- Object → **Extruder → 2**.
+- Same deal; only T1 is preheated.
 
-### Jak je ověřený `M118` border info ve start gcode
+### Dual material / dual colour (print_mode = 4)
 
-Firmware v `BuildPrint::getPrintFileParam()` **přímo parsuje**
-`M118 X<n> Y<n> Z<n> T<n>` ze startu gcode a validuje proti rozměrům
-tiskárny (300 × 250 × 200). Pokud chybí nebo rozměry přesahují,
-tiskárna hlásí `"X axis size exceeding standard"` apod. Proto je
-tento řádek v `machine_start_gcode` nezbytný — není to kosmetika,
-je to firmware kontrola.
+- Top bar **Add filament** → pick a second filament (e.g. black PLA +
+  white PLA).
+- Assign each object or modifier to filament 1 or 2.
+- Prime tower stays on. Default flush volume is 140 mm³; bump to 200+
+  for high-contrast transitions (black → white), drop to 80 for same
+  material in two colours.
 
-## Zdroje a credits
+All three modes work out of the box because the firmware simply
+replays whatever `T0`/`T1` sequence it receives.
 
-Profil kombinuje tři zdroje:
+## Mirror and replica (IDEX modes 1 and 2)
 
-1. **Oficiální FlashForge Cura setup PDF** — bed, origin at center,
-   G-code flavor, extruder count. [PDF](https://en.fss.flashforge.com/10000/software/a42243ba68cb81dc8afd7b7fb3e71dcf.pdf).
-2. **[HellEvro/FF_Gcode_to_GX](https://github.com/HellEvro/FF_Gcode_to_GX)**
-   — bajt-level layout `.gx` headeru validovaný majitelem Creator 3 Pro
-   proti výstupu FlashPrintu 5, plus pracovní start gcode a pause gcode
-   (`M2000`). Můj `gx_converter.py` používá stejný layout.
-3. **Snapmaker J1 OrcaSlicer profil** — reference pro IDEX duplicate
-   (`M605 S2 X<offset> R0`) a mirror (`M605 S3`) módy. Creator 3 tuto
-   syntaxi pravděpodobně nezná, viz sekci níže.
+The Creator 3 firmware has **no M-code** to switch into mirror or
+replica mode (unlike Snapmaker J1's `M605 S2/S3`). You have two paths.
 
-## Co je ověřené proti oficiálnímu FlashForge Cura setupu
+### Path A — pick the mode on the printer (recommended)
 
-Hodnoty v tomto profilu jsou sladěné s oficiálním návodem *"Cura Setup
-for Flashforge Creator 3/Creator 3 Pro"* (en.fss.flashforge.com, PDF):
+1. In OrcaSlicer, slice as a **single-extruder** print on either head.
+2. Convert to `.gx` as usual and upload it.
+3. On the printer touchscreen, before you tap Print, select
+   **Mirror Print** or **Replica Print** on the file menu.
 
-- **Bed:** 300×250×200, origin at CENTER (souřadnice -150…+150 v X,
-  -125…+125 v Y). Pozor, start gcode používá záporné souřadnice —
-  pokud by firmware odmítal, ověřit v displeji tiskárny.
-- **G-code flavor:** Marlin
-- **Material:** 1.75 mm
-- **Nozzle offset:** 0,0 (offset řeší firmware)
-- **Start gcode:** kombinace oficiálního Cura PDF a validovaného
-  Creator 3 Pro start gcode z HellEvro repa — začíná `M118 X150 Y125
-  Z200 T<n>` (border info pro firmware), potom `M140`/`G28`/`G1 Z15`
-  pro ohřev a sjezd lože, selekce extruderu, `M109`, LED zapnutí
-  přes `M651 S255`.
-- **End gcode:** `M104 S0` / `M140 S0` / `G162 Z F1800`
-  (FlashForge-specifický home Z na maximum) / `M652` (LED off) /
-  `G91` / `M18`
-- **Pause:** `M2000` (FlashForge-specifický, ne standardní `M601`)
-- **Extruder select:** `M108 T0` nebo `M108 T1` (FlashForge-specifický,
-  předchází standardnímu `T0`/`T1` při change-filament)
+This uses the firmware's own mode machinery (the stock FlashPrint 5
+workflow) and does not depend on anything undocumented. It's the one
+to try first.
 
-### Pozor: oficiální FlashForge přiznání
+### Path B — bake the mode into the gcode
 
-> *"Note: Cura currently does not support slicing files for dual extruder
-> printers. The Extruder 1 on Machine Settings window refers to the right
-> extruder."*
+If you upload via a cloud dashboard that can't reach the mode selector
+on the touchscreen, add a second post-processing step **before** the
+`.gx` converter runs:
 
-To znamená, že **oficiální Cura setup umí jen single-extruder tisk**
-(buď levá, nebo pravá hlava, ne obě zároveň). Dual-material je exkluzivita
-FlashPrintu 5.
+**Settings → Others → Post-processing scripts** (one script per line,
+order matters):
 
-OrcaSlicer má lepší IDEX podporu než Cura (díky Snapmaker J1), takže
-dual-material by měl v OrcaSlicer teoreticky fungovat, ale je to
-**experimentální** a chce test. Pokud dual-material selhává, přepni se
-na single-material a vyber si levou nebo pravou hlavu — to funguje
-spolehlivě.
+```
+python3 "/path/to/orca-profile/scripts/idex_mirror.py" --mode mirror
+python3 "/path/to/orca-profile/scripts/gx_converter.py"
+```
 
-## Co ještě chybí
+Replica with 150 mm X offset:
 
-- **Reálný dual-head start/end G-code z FlashPrintu 5.** Pokud chceš
-  tisknout dvěma materiály najednou, FlashPrint má specifickou start
-  sekvenci pro priming obou trysek a parkování neaktivní hlavy. Pošli
-  mi jeden `.gx` z FlashPrintu 5 (dual-head kostka 20×20×20 mm v PLA)
-  a vytáhnu z něj přesné sekvence pro OrcaSlicer.
-- **Duplicate / mirror mód** — stock OrcaSlicer to umí jen pro Snapmaker
-  J1 a chce specifický M-code na začátku. Z reference `.gx` bych vytáhl
-  i tohle.
-- **Bed model `.stl`** a texture `.png` — kosmetika pro náhled v Orca.
-- **Nozzle X-offset** pro IDEX. Teď je `extruder_offset = [0x0, 0x0]`,
-  což OrcaSlicer bere jako "ovládá to firmware". Pokud by druhá hlava
-  tiskla s posunem, nastavit zde skutečný offset podle kalibračních
-  testů.
+```
+python3 "/path/to/orca-profile/scripts/idex_mirror.py" --mode replica --offset 150
+```
 
-## Testování
+The script interleaves each `G1 X.. Y.. E..` with a twin `G1`
+targeting the other head (mirrored across X=0, or offset in replica
+mode). The firmware steps both carriages in sequence — slower than the
+native touchscreen mode but geometrically correct.
 
-1. V OrcaSlicer načti referenční model (20mm kostku).
-2. Vyber vendor **FlashForge**, printer **Creator 3**.
-3. Slice, over "Preview" zkontroluj, že se používá správný extruder.
-4. Export vyrobí `.gcode` + konvertor vytvoří `.gx`.
-5. `.gx` nahraj na SD / přes lokální cloud a vytiskni.
-6. Pokud něco neseděsní (teploty, časy v displeji tiskárny, předehřev
-   druhé trysky, kterou nepotřebuješ) → nahlás, co displeja ukazuje
-   proti tomu, co má být, a dám to do pořádku.
+Caveat: this path has not been dyno-tested on a real Creator 3 yet,
+only on synthetic gcode. If you try it, open an issue and tell us how
+it went so we can tune the T0↔T1 interleave spacing.
 
-## Interní struktura
+## How IDEX actually works on Creator 3 (RE findings)
+
+Disassembling `creator3-arm` (UI software v1.4.8) and `control_run`
+(motion controller v4.2.3) answered the main unknown: *how does the
+printer decide between left-only / right-only / mirror / replica /
+double?*
+
+**The `print_mode` enum** (resolved from the jump table in
+`ShowTFCard::getPrintMode()` at `0xf2bb0`):
+
+| value | label on display | how it's generated |
+|---|---|---|
+| 0 | **Right**   | single-extruder gcode with T0 |
+| 1 | **Mirror**  | gcode already contains mirrored motion for the second head |
+| 2 | **Replica** | gcode duplicates motion with an X offset |
+| 3 | **Left**    | single-extruder gcode with T1 |
+| 4 | **Double**  | standard dual-material with toolchanges |
+
+**Where it is NOT:** the motion controller binary has zero
+mirror/replica/duplicate/idex strings; there is no `M605` or FlashForge
+variant that switches modes. `BuildPrint::getPrintFileParam()` doesn't
+read any `print_mode` field from the `.gx` either.
+
+**Where it IS:** `/data/PowerOff` on the printer, written by
+`FILESNAMESPACE::CPowerSavingModeFile::setPowerSavingMode(PrintContinueConfig)`.
+That's a power-loss recovery state file, not a configuration source.
+`PrintMode:` is set by UI selection on the touchscreen before a print
+starts, which matches Path A above.
+
+**What the firmware does enforce:** `M118 X<n> Y<n> Z<n> T<n>` at the
+top of the gcode. The parser validates X/Y/Z against the 300/250/200
+bounds and aborts with `"X axis size exceeding standard"` etc. if the
+line is missing or oversized. That's why `machine_start_gcode` begins
+with `M118 X150 Y125 Z200 T[initial_extruder]` — not decoration, a
+hard requirement.
+
+## What's inside this folder
 
 ```
 orca-profile/
-├── FlashForge.json              # vendor index
+├── FlashForge.json                              # vendor index
 ├── machine/
-│   ├── FlashForge_Creator3.json       # printer settings
-│   └── FlashForge_Creator3_model.json # machine_model (vizuál)
+│   ├── FlashForge_Creator3.json                 # printer settings
+│   └── FlashForge_Creator3_model.json           # machine_model (vendor list)
 ├── filament/
 │   ├── FlashForge_Generic_PLA_Creator3.json
 │   ├── FlashForge_Generic_PETG_Creator3.json
@@ -230,7 +266,44 @@ orca-profile/
 │   ├── 0.20mm_Standard_Creator3.json
 │   └── 0.30mm_Draft_Creator3.json
 ├── scripts/
-│   ├── gx_converter.py           # .gcode → .gx post-processing
-│   └── install_macos.sh
+│   ├── gx_converter.py                          # .gcode → .gx
+│   ├── idex_mirror.py                           # mirror/replica post-processor
+│   ├── install_macos.sh
+│   └── install_windows.ps1
 └── README.md
 ```
+
+## Troubleshooting
+
+**OrcaSlicer doesn't show FlashForge in the vendor list.**
+Did you restart it? Did you run the installer against the right
+install root? On Windows pass `-OrcaRoot "D:\OrcaSlicer"` if you
+installed to a non-default location.
+
+**Printer rejects the file with "X axis size exceeding standard".**
+The `M118 X.. Y.. Z..` line is missing or has larger values than
+your bed. Check `machine_start_gcode` in the printer profile hasn't
+been overridden.
+
+**`.gx` prints at the wrong temperature or shows weird time estimate.**
+The converter extracts time, filament, temps, layer height, shells
+and speed from OrcaSlicer's gcode comments. If OrcaSlicer stops
+emitting those comments (version change), open the gcode and look for
+`;Filament used`, `;TIME:`, `;Layer height:` lines. If they're gone,
+upgrade / downgrade OrcaSlicer or file an issue with the gcode
+header.
+
+**Dual-material print starts but T1 never fires.**
+Prime tower must be enabled (`enable_prime_tower = 1` in the process
+profile — default is on). Without it, OrcaSlicer may optimise T1 out
+if it never prints anything significant before the model finishes.
+
+**Mirror mode (Path B) crashes or prints garbage.**
+Switch to Path A (touchscreen mode selection) and open an issue with
+a short sample gcode. The interleave strategy in `idex_mirror.py` is
+untested on real hardware.
+
+## License
+
+MIT, same as the parent repo. FlashForge trademarks and firmware
+belong to their respective owners.

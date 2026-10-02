@@ -35,6 +35,7 @@ that make this whole project possible:
 | [`cloud/ff_cloud.py`](cloud/ff_cloud.py) | Local "cloud" + dashboard + control (Python stdlib only) |
 | [`cloud/start-isolated.sh`](cloud/start-isolated.sh) | Brings up an isolated network (host as DHCP+DNS) and the server |
 | [`usb/flashforge_init.sh`](usb/flashforge_init.sh) | Backup/recon script run from USB as root |
+| [`orca-profile/`](orca-profile/) | **OrcaSlicer vendor profile for Creator 3** — printer / filament / process JSONs plus `.gx` converter and IDEX mirror/replica post-processors |
 | [`docs/firmware-analysis.md`](docs/firmware-analysis.md) | What's inside the firmware, how to unpack it |
 | [`docs/cloud-protocol.md`](docs/cloud-protocol.md) | Reverse-engineered cloud protocol (register/status/update) |
 | [`docs/protocol-8899.md`](docs/protocol-8899.md) | Local port 8899 command reference |
