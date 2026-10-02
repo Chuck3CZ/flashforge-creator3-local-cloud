@@ -11,12 +11,12 @@
     ],
     "process_list": [
         {
-            "name": "0.10mm Fine @Creator3",
-            "sub_path": "process/0.10mm_Fine_Creator3.json"
-        },
-        {
             "name": "0.20mm Standard @Creator3",
             "sub_path": "process/0.20mm_Standard_Creator3.json"
+        },
+        {
+            "name": "0.10mm Fine @Creator3",
+            "sub_path": "process/0.10mm_Fine_Creator3.json"
         },
         {
             "name": "0.30mm Draft @Creator3",
