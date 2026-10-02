@@ -68,12 +68,17 @@ cd flashforge-creator3-local-cloud/orca-profile
 ./scripts/install_macos.sh
 ```
 
-The installer asks for `sudo` once (OrcaSlicer's bundled profiles live
-inside the `.app`), backs up any existing `FlashForge.json` /
-`FlashForge/` with a timestamped suffix, and prints the next steps.
+The installer writes into OrcaSlicer's **per-user system cache**
+(`~/Library/Application Support/OrcaSlicer/system/`) – that's where
+OrcaSlicer actually loads vendor presets from. It refreshes the cache from
+the `.app` bundle only when the bundled vendor version is newer, so edits
+inside the bundle are silently ignored. No `sudo`, and the app's code
+signature stays intact.
 
-Rerun after each OrcaSlicer update — bundled profiles are replaced on
-update. `./scripts/install_macos.sh --uninstall` removes it.
+Launch OrcaSlicer once before the first install (so the cache exists) and
+quit it with `Cmd+Q` before running the script. Rerun after every
+OrcaSlicer update – an update rewrites the cache.
+`./scripts/install_macos.sh --uninstall` removes it.
 
 Dry run: `./scripts/install_macos.sh --dry-run`.
 
@@ -303,12 +308,17 @@ Switch to Path A (touchscreen mode selection) and open an issue with
 a short sample gcode. The interleave strategy in `idex_mirror.py` is
 untested on real hardware.
 
-**macOS says OrcaSlicer "is damaged and can't be opened" after install.**
-`install_macos.sh` writes into `OrcaSlicer.app`, which invalidates
-Apple's code signature, so Gatekeeper flags the bundle. Clear it with
-`xattr -dr com.apple.quarantine /Applications/OrcaSlicer.app` (this
-weakens Gatekeeper for that app — your call). Note bundle installs are
-also wiped on every OrcaSlicer update; re-run the installer afterwards.
+**macOS says OrcaSlicer "is damaged and can't be opened".**
+Older versions of the installer wrote into `OrcaSlicer.app`, which breaks
+its code signature. The current installer only touches the user cache.
+If your bundle was already modified, reinstall OrcaSlicer from the DMG to
+get a clean, signed app, then run the installer again.
+
+**Creator 3 is in Add/Remove Printers but the printer name stays empty /
+another preset loads instead.**
+OrcaSlicer is using a stale cached copy. Quit it (`Cmd+Q`), re-run
+`install_macos.sh`, start it again. The machine preset `name` must equal
+the vendor `machine_list` entry (`FlashForge Creator 3 0.4 nozzle`).
 
 ## Verified against FlashPrint 5
 
