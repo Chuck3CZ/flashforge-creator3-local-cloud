@@ -345,6 +345,12 @@ both heads. Key facts that shaped the profile:
 - **Tool numbers are reversed vs. intuition:** right nozzle = `T0`,
   left nozzle = `T1` (matches the `print_mode` table above and the
   reference gcode, where the left-head file heats/waits on `T1`).
+- **Extruder numbering in OrcaSlicer:** OrcaSlicer draws Extruder 1 on the
+  left, so **Extruder 1 = LEFT nozzle, Extruder 2 = RIGHT nozzle**.
+  `gx_converter.py` remaps the tool numbers to FlashForge's
+  (left = `T1`, right = `T0`) in `M104/M109/M6/M108/M118` and fills the
+  `.gx` header slots per nozzle actually used. Set
+  `GX_TOOL_MAP="0:0,1:1"` to disable the remap.
 - Start sequence uses FlashForge waits `M7 T0` (bed) and `M6 T<n>`
   (active nozzle); no `G28` — the firmware homes itself at print start.
 - End sequence `G162 Z` (platform down) + `M652` + `M18`.

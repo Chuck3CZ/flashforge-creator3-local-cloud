@@ -281,17 +281,18 @@ def extract_metadata(gcode_text: str) -> dict[str, int]:
     return md
 
 
-def detect_dual(gcode_text: str, md: dict[str, int]) -> bool:
-    """A job is dual-material if the gcode toggles between T0 and T1, or
-    if OrcaSlicer reported non-zero filament for both extruders."""
-    if md.get("filament_mm_1", 0) > 0 and md.get("filament_mm_0", 0) > 0:
-        return True
-    uses_t0 = re.search(r"^\s*T0\b", gcode_text, flags=re.M) is not None
-    uses_t1 = re.search(r"^\s*T1\b", gcode_text, flags=re.M) is not None
-    return uses_t0 and uses_t1
+def used_tools(gcode_text: str) -> set[int]:
+    """FlashForge tools (0 right, 1 left) the normalized job selects."""
+    used = {int(t) for t in re.findall(r"(?m)^\s*M108 T([01])\b", gcode_text)}
+    if not used:  # no explicit selection: fall back to non-zero start temps
+        for line in gcode_text.splitlines()[:500]:
+            m = re.match(r"^\s*M104\s+S(\d+).*\bT([01])\b", line)
+            if m and int(m.group(1)) > 0:
+                used.add(int(m.group(2)))
+    return used or {0}
 
 
-def build_header(md: dict[str, int], is_dual: bool) -> bytes:
+def build_header(md: dict[str, int], used: set[int]) -> bytes:
     """Pack the 58-byte .gx header.
 
     Layout verified against the HellEvro/FF_Gcode_to_GX reference, which
@@ -315,7 +316,10 @@ def build_header(md: dict[str, int], is_dual: bool) -> bytes:
         bytes 54..55 : nozzle temp, left (int16)
         bytes 56..57 : reserved (int16, always 1 per reference)
     """
-    multi = 1 if is_dual else 0
+    multi = 1 if len(used) > 1 else 0
+    # per FlashForge tool: value of the Orca extruder mapped to it, 0 if unused
+    fil = {t: (md["filament_mm_%d" % ORCA_OF[t]] if t in used else 0) for t in (0, 1)}
+    tmp = {t: (md["nozzle_temp_%d" % ORCA_OF[t]] if t in used else 0) for t in (0, 1)}
     hdr = bytearray(HEADER_LEN)
     hdr[0:12] = MAGIC
     struct.pack_into("<i", hdr, 12, 0)
@@ -323,18 +327,32 @@ def build_header(md: dict[str, int], is_dual: bool) -> bytes:
     struct.pack_into("<i", hdr, 20, GCODE_OFFSET)
     struct.pack_into("<i", hdr, 24, GCODE_OFFSET)
     struct.pack_into("<i", hdr, 28, max(md["print_time"], 1))
-    struct.pack_into("<i", hdr, 32, md["filament_mm_0"])
-    struct.pack_into("<i", hdr, 36, md["filament_mm_1"] if is_dual else 0)
+    struct.pack_into("<i", hdr, 32, fil[0])   # right = T0
+    struct.pack_into("<i", hdr, 36, fil[1])   # left  = T1
     struct.pack_into("<h", hdr, 40, multi)
     struct.pack_into("<h", hdr, 42, md["layer_height_um"])
     struct.pack_into("<h", hdr, 44, 0)
     struct.pack_into("<h", hdr, 46, md["shells"])
     struct.pack_into("<h", hdr, 48, md["print_speed"])
     struct.pack_into("<h", hdr, 50, md["bed_temp"])
-    struct.pack_into("<h", hdr, 52, md["nozzle_temp_0"])
-    struct.pack_into("<h", hdr, 54, md["nozzle_temp_1"] if is_dual else 0)
+    struct.pack_into("<h", hdr, 52, tmp[0])   # right = T0
+    struct.pack_into("<h", hdr, 54, tmp[1])   # left  = T1
     struct.pack_into("<h", hdr, 56, 1)
     return bytes(hdr)
+
+
+# OrcaSlicer extruder index -> FlashForge tool number. OrcaSlicer draws
+# Extruder 1 on the left, so by default Extruder 1 = LEFT nozzle (FlashForge
+# T1) and Extruder 2 = RIGHT nozzle (T0). Override: GX_TOOL_MAP="0:0,1:1".
+TOOL_MAP = {int(a): int(b) for a, b in (
+    kv.split(":") for kv in os.environ.get("GX_TOOL_MAP", "0:1,1:0").split(","))}
+ORCA_OF = {v: k for k, v in TOOL_MAP.items()}   # FlashForge tool -> Orca index
+_TOOL_CMD = re.compile(r"^\s*(M104|M109|M6|M108|M118)\b")
+_TOOL_WORD = re.compile(r"\bT([01])\b")
+
+
+def _remap_tools(code: str) -> str:
+    return _TOOL_WORD.sub(lambda m: "T%d" % TOOL_MAP[int(m.group(1))], code)
 
 
 # Commands OrcaSlicer emits that stock FlashPrint 5 output never contains.
@@ -386,7 +404,10 @@ def normalize_gcode(text: str) -> str:
                     " ;" + line.split(";", 1)[1] if ";" in line else "")
         t = re.match(r"^\s*T([01])\s*$", code)
         if t:
-            line = "M108 T" + t.group(1)
+            line = "M108 T%d" % TOOL_MAP[int(t.group(1))]
+        elif _TOOL_CMD.match(code):
+            line = _remap_tools(code).rstrip() + (
+                " ;" + line.split(";", 1)[1] if ";" in line else "")
         elif re.match(r"^\s*M106\s+S0(\.0*)?\s*$", code):
             line = "M107"
         out.append(line)
@@ -437,7 +458,7 @@ def ensure_tool_temps(text: str) -> str:
         cur = re.search(r"\bS(\d+)", lines[last]).group(1) if last is not None else "0"
         if int(cur) > 0:
             continue
-        fixed = "M104 S%d T%d" % (temps[t] or 210, t)
+        fixed = "M104 S%d T%d" % (temps[ORCA_OF[t]] or 210, t)
         if last is not None:
             lines[last] = fixed
         else:
@@ -461,9 +482,8 @@ def convert(gcode_path: Path, gx_path: Path | None = None, keep_gcode: bool = Tr
         gcode_bytes = gcode_text.encode("utf-8")
 
     md = extract_metadata(gcode_text)
-    is_dual = detect_dual(gcode_text, md)
     thumbnail = thumb or build_placeholder_bmp()
-    header = build_header(md, is_dual)
+    header = build_header(md, used_tools(gcode_text))
 
     out = gx_path or gcode_path.with_suffix(".gx")
     with out.open("wb") as f:
