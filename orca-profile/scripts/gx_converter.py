@@ -222,12 +222,63 @@ def build_header(md: dict[str, int], is_dual: bool) -> bytes:
     return bytes(hdr)
 
 
+# Commands OrcaSlicer emits that stock FlashPrint 5 output never contains.
+_DROP_CMDS = re.compile(r"^\s*(M73|M201|M203|M204|M205|G21|M82)\b")
+_E_WORD = re.compile(r"(?<=\s)E(-?\d*\.?\d+)")
+_G92_E = re.compile(r"^\s*G92\b.*?\bE(-?\d*\.?\d+)")
+
+
+def normalize_gcode(text: str) -> str:
+    """Make OrcaSlicer output look like FlashPrint 5 output.
+
+    - drops M73/M201/M203/M204/M205/G21/M82,
+    - folds every `G92 E<v>` into a running offset so E stays one
+      monotonically increasing absolute axis (FlashPrint never resets E;
+      OrcaSlicer resets it after every wipe),
+    - bare `T0`/`T1` -> `M108 T0`/`M108 T1`, `M106 S0` -> `M107`.
+
+    Relative-E files (M83) are returned unchanged apart from the drops.
+    """
+    relative = re.search(r"(?m)^\s*M83\b", text) is not None
+    offset = 0.0      # added to every E word
+    last_e = 0.0      # last logical (pre-offset) E position
+    out = []
+    for line in text.splitlines():
+        code = line.split(";", 1)[0]
+        if _DROP_CMDS.match(code):
+            continue
+        if not relative:
+            m = _G92_E.match(code)
+            if m:
+                offset += last_e - float(m.group(1))
+                last_e = float(m.group(1))
+                continue
+            if re.match(r"^\s*G[0-3]\b", code) and _E_WORD.search(code):
+                def shift(mm: re.Match) -> str:
+                    global_e = float(mm.group(1)) + offset
+                    return "E%.5f" % global_e
+                last_e = float(_E_WORD.search(code).group(1))
+                line = _E_WORD.sub(shift, code, count=1).rstrip() + (
+                    " ;" + line.split(";", 1)[1] if ";" in line else "")
+        t = re.match(r"^\s*T([01])\s*$", code)
+        if t:
+            line = "M108 T" + t.group(1)
+        elif re.match(r"^\s*M106\s+S0(\.0*)?\s*$", code):
+            line = "M107"
+        out.append(line)
+    return "\n".join(out) + "\n"
+
+
 def convert(gcode_path: Path, gx_path: Path | None = None, keep_gcode: bool = True) -> Path:
     gcode_bytes = gcode_path.read_bytes()
     try:
         gcode_text = gcode_bytes.decode("utf-8", errors="replace")
     except UnicodeDecodeError:
         gcode_text = gcode_bytes.decode("latin-1", errors="replace")
+
+    if os.environ.get("GX_NORMALIZE", "1") != "0":
+        gcode_text = normalize_gcode(gcode_text)
+        gcode_bytes = gcode_text.encode("utf-8")
 
     md = extract_metadata(gcode_text)
     is_dual = detect_dual(gcode_text, md)
