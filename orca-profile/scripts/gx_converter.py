@@ -76,6 +76,121 @@ def build_placeholder_bmp(rgb: tuple[int, int, int] = (40, 40, 48)) -> bytes:
     return bmp_header + dib_header + pixels
 
 
+def _decode_png(data: bytes) -> tuple[int, int, list[tuple[int, int, int, int]]]:
+    """Minimal PNG decoder (8-bit, non-interlaced, gray/RGB/RGBA/gray+alpha).
+    Returns (width, height, RGBA pixels row-major)."""
+    import zlib
+    if data[:8] != b"\x89PNG\r\n\x1a\n":
+        raise ValueError("not a PNG")
+    pos, idat, w = 8, b"", 0
+    while pos < len(data):
+        ln, typ = struct.unpack_from(">I4s", data, pos)
+        chunk = data[pos + 8:pos + 8 + ln]
+        if typ == b"IHDR":
+            w, h, depth, ctype, _c, _f, interlace = struct.unpack(">IIBBBBB", chunk)
+            if depth != 8 or interlace:
+                raise ValueError("unsupported PNG (depth %d, interlace %d)" % (depth, interlace))
+            bpp = {0: 1, 2: 3, 4: 2, 6: 4}[ctype]
+        elif typ == b"IDAT":
+            idat += chunk
+        elif typ == b"IEND":
+            break
+        pos += 12 + ln
+    raw = zlib.decompress(idat)
+    stride = w * bpp
+    prev = bytearray(stride)
+    px: list[tuple[int, int, int, int]] = []
+    i = 0
+    for _ in range(h):
+        ft = raw[i]
+        line = bytearray(raw[i + 1:i + 1 + stride])
+        i += 1 + stride
+        for x in range(stride):
+            a = line[x - bpp] if x >= bpp else 0
+            b = prev[x]
+            c = prev[x - bpp] if x >= bpp else 0
+            if ft == 1:
+                line[x] = (line[x] + a) & 255
+            elif ft == 2:
+                line[x] = (line[x] + b) & 255
+            elif ft == 3:
+                line[x] = (line[x] + ((a + b) >> 1)) & 255
+            elif ft == 4:
+                p = a + b - c
+                pa, pb, pc = abs(p - a), abs(p - b), abs(p - c)
+                line[x] = (line[x] + (a if pa <= pb and pa <= pc else b if pb <= pc else c)) & 255
+        prev = line
+        for x in range(0, stride, bpp):
+            if bpp == 4:
+                px.append((line[x], line[x + 1], line[x + 2], line[x + 3]))
+            elif bpp == 3:
+                px.append((line[x], line[x + 1], line[x + 2], 255))
+            elif bpp == 2:
+                px.append((line[x], line[x], line[x], line[x + 1]))
+            else:
+                px.append((line[x], line[x], line[x], 255))
+    return w, h, px
+
+
+def thumbnail_bmp_from_gcode(gcode_text: str,
+                             bg: tuple[int, int, int] = (40, 40, 48)) -> bytes | None:
+    """Take the largest PNG thumbnail OrcaSlicer embedded in the gcode
+    ('; thumbnail begin WxH len' ... '; thumbnail end'), crop transparent
+    margins, fit it into 80x60 (box-filtered, aspect kept, centred) over `bg`
+    and return a 24-bit BMP. None if there is no usable thumbnail."""
+    import base64
+    best = None
+    for m in re.finditer(r"(?ms)^;\s*thumbnail begin (\d+)x(\d+) \d+\s*\n(.*?)^;\s*thumbnail end", gcode_text):
+        area = int(m.group(1)) * int(m.group(2))
+        if best is None or area > best[0]:
+            best = (area, m.group(3))
+    if best is None:
+        return None
+    try:
+        b64 = "".join(l.lstrip("; ").strip() for l in best[1].splitlines())
+        w, h, px = _decode_png(base64.b64decode(b64))
+    except Exception as e:  # never fail the whole conversion on a thumbnail
+        print(f"thumbnail skipped: {e}", file=sys.stderr)
+        return None
+
+    # crop to the non-transparent bounding box (+ small margin)
+    xs = [i % w for i, p in enumerate(px) if p[3] > 8]
+    ys = [i // w for i, p in enumerate(px) if p[3] > 8]
+    if not xs:
+        return None
+    m = 2
+    x0, x1 = max(min(xs) - m, 0), min(max(xs) + m + 1, w)
+    y0, y1 = max(min(ys) - m, 0), min(max(ys) + m + 1, h)
+    cw, ch = x1 - x0, y1 - y0
+    scale = min((BMP_WIDTH - 4) / cw, (BMP_HEIGHT - 4) / ch)
+    tw, th = max(1, int(cw * scale)), max(1, int(ch * scale))
+    ox, oy = (BMP_WIDTH - tw) // 2, (BMP_HEIGHT - th) // 2
+
+    out = [[bg] * BMP_WIDTH for _ in range(BMP_HEIGHT)]
+    for ty in range(th):
+        sy0 = y0 + ty * ch / th
+        sy1 = y0 + (ty + 1) * ch / th
+        for tx in range(tw):
+            sx0 = x0 + tx * cw / tw
+            sx1 = x0 + (tx + 1) * cw / tw
+            r = g = b = n = 0
+            for sy in range(int(sy0), max(int(sy0) + 1, int(sy1))):
+                for sx in range(int(sx0), max(int(sx0) + 1, int(sx1))):
+                    pr, pg, pb, pa = px[sy * w + sx]
+                    al = pa / 255.0
+                    r += pr * al + bg[0] * (1 - al)
+                    g += pg * al + bg[1] * (1 - al)
+                    b += pb * al + bg[2] * (1 - al)
+                    n += 1
+            out[oy + ty][ox + tx] = (int(r / n), int(g / n), int(b / n))
+
+    pixels = bytearray()
+    for row in reversed(out):            # BMP is bottom-up, BGR
+        for r, g, b in row:
+            pixels += bytes((b, g, r))
+    return build_placeholder_bmp()[:54] + bytes(pixels)
+
+
 _METADATA_PATTERNS: dict[str, re.Pattern[str]] = {
     "print_time": re.compile(r";\s*(?:estimated printing time.*?=|TIME:)\s*([^\n]+)", re.I),
     "filament_used_mm": re.compile(r";\s*(?:Filament used|filament used \[mm\])\s*[:=]\s*([^\n]+)", re.I),
@@ -243,7 +358,16 @@ def normalize_gcode(text: str) -> str:
     offset = 0.0      # added to every E word
     last_e = 0.0      # last logical (pre-offset) E position
     out = []
+    in_thumb = False
     for line in text.splitlines():
+        if re.match(r"^;\s*(THUMBNAIL_BLOCK_START|thumbnail begin)", line):
+            in_thumb = True
+        if in_thumb:
+            if re.match(r"^;\s*(THUMBNAIL_BLOCK_END)", line):
+                in_thumb = False
+            elif re.match(r"^;\s*thumbnail end", line) and "THUMBNAIL_BLOCK_START" not in text:
+                in_thumb = False
+            continue
         code = line.split(";", 1)[0]
         if _DROP_CMDS.match(code):
             continue
@@ -276,13 +400,15 @@ def convert(gcode_path: Path, gx_path: Path | None = None, keep_gcode: bool = Tr
     except UnicodeDecodeError:
         gcode_text = gcode_bytes.decode("latin-1", errors="replace")
 
+    thumb = thumbnail_bmp_from_gcode(gcode_text)
+
     if os.environ.get("GX_NORMALIZE", "1") != "0":
         gcode_text = normalize_gcode(gcode_text)
         gcode_bytes = gcode_text.encode("utf-8")
 
     md = extract_metadata(gcode_text)
     is_dual = detect_dual(gcode_text, md)
-    thumbnail = build_placeholder_bmp()
+    thumbnail = thumb or build_placeholder_bmp()
     header = build_header(md, is_dual)
 
     out = gx_path or gcode_path.with_suffix(".gx")

@@ -177,5 +177,7 @@
     "machine_pause_gcode": "M2000 ; FlashForge pause\n",
     "before_layer_change_gcode": ";BEFORE_LAYER_CHANGE\n;[layer_z]\n",
     "layer_change_gcode": ";AFTER_LAYER_CHANGE\n;[layer_z]\n",
-    "use_relative_e_distances": "0"
+    "use_relative_e_distances": "0",
+    "thumbnails": "160x120/PNG",
+    "thumbnails_format": "PNG"
 }
