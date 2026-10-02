@@ -307,6 +307,20 @@ def main(argv: list[str]) -> int:
         print(f"input not found: {gcode_path}", file=sys.stderr)
         return 1
 
+    # Called by OrcaSlicer as a post-processing script: argv[1] is a temporary
+    # file that Orca copies to the final destination afterwards. Overwrite it
+    # in place with the .gx bytes and tell Orca to save it under a .gx name
+    # via the "<input>.output_name" file (PrusaSlicer/OrcaSlicer convention).
+    final_name = os.environ.get("SLIC3R_PP_OUTPUT_NAME")
+    if final_name and len(argv) == 2:
+        tmp_gx = gcode_path.with_name(gcode_path.name + ".gx.tmp")
+        convert(gcode_path, tmp_gx, keep_gcode=True)
+        os.replace(tmp_gx, gcode_path)
+        gx_name = Path(final_name).with_suffix(".gx").name
+        Path(str(gcode_path) + ".output_name").write_text(gx_name)
+        print(f"converted in place, output name {gx_name}")
+        return 0
+
     gx_path = Path(argv[2]) if len(argv) > 2 else None
     keep = os.environ.get("GX_KEEP_GCODE", "1") != "0"
     out = convert(gcode_path, gx_path, keep_gcode=keep)

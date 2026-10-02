@@ -86,10 +86,27 @@ run cp "\"$HERE/process/\"*Creator3*.json" "\"$VENDOR_DIR/process/\""
 run cp "\"$HERE/filament/\"*Creator3*.json" "\"$VENDOR_DIR/filament/\""
 update_vendor 1
 
+# Wire the .gx converter into the Creator 3 process presets (absolute path,
+# system python so it works when OrcaSlicer is launched from the Dock).
+PP_CMD="/usr/bin/python3 \"$HERE/scripts/gx_converter.py\""
+if (( DRY_RUN )); then
+    echo "[dry-run] set post_process = $PP_CMD"
+else
+    python3 - "$PP_CMD" "$VENDOR_DIR/process/"*Creator3*.json <<'PY'
+import json, sys
+cmd, files = sys.argv[1], sys.argv[2:]
+for f in files:
+    d = json.load(open(f))
+    d["post_process"] = [cmd]
+    json.dump(d, open(f, "w"), indent=4, ensure_ascii=False)
+print("  post_process set on %d process presets" % len(files))
+PY
+fi
+
 echo
 echo "Installed. Start OrcaSlicer, then:"
 echo "  1. Printer selector → FlashForge Creator 3 0.4 nozzle"
 echo "     (if missing: Add/Remove Printers → Flashforge → Creator 3)"
-echo "  2. Settings → Others → 'Post-processing scripts':"
-echo "       python3 \"$HERE/scripts/gx_converter.py\""
+echo "  2. Slicing then saves a .gx directly (the converter is wired in"
+echo "     automatically as the post-processing script)."
 echo "  3. Right-click the model → Set Extruder: 1 = right (T0), 2 = left (T1)."
