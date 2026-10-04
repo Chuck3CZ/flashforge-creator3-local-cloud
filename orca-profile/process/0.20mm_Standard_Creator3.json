@@ -53,5 +53,7 @@
         "140",
         "140",
         "0"
-    ]
+    ],
+    "ooze_prevention": "1",
+    "standby_temperature_delta": "-40"
 }

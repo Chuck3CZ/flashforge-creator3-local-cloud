@@ -375,7 +375,8 @@ def normalize_gcode(text: str) -> str:
     - folds every `G92 E<v>` into a running offset so E stays one
       monotonically increasing absolute axis (FlashPrint never resets E;
       OrcaSlicer resets it after every wipe),
-    - bare `T0`/`T1` -> `M108 T0`/`M108 T1`, `M106 S0` -> `M107`.
+    - bare `T0`/`T1` -> `M108 T0`/`M108 T1`, `M106 S0` -> `M107`,
+    - `M109 S<t> [T<n>]` -> `M104 S<t> T<n>` + `M6 T<n>` (FlashForge wait).
 
     Relative-E files (M83) are returned unchanged apart from the drops.
     """
@@ -383,6 +384,7 @@ def normalize_gcode(text: str) -> str:
     offset = 0.0      # added to every E word
     last_e = 0.0      # last logical (pre-offset) E position
     out = []
+    cur_tool = TOOL_MAP[0]
     in_thumb = False
     for line in text.splitlines():
         if re.match(r"^;\s*(THUMBNAIL_BLOCK_START|thumbnail begin)", line):
@@ -411,7 +413,16 @@ def normalize_gcode(text: str) -> str:
                     " ;" + line.split(";", 1)[1] if ";" in line else "")
         t = re.match(r"^\s*T([01])\s*$", code)
         if t:
-            line = "M108 T%d" % TOOL_MAP[int(t.group(1))]
+            cur_tool = TOOL_MAP[int(t.group(1))]
+            line = "M108 T%d" % cur_tool
+        elif re.match(r"^\s*M109\b", code):
+            # FlashPrint never uses M109; FlashForge waits with M6.
+            sm = re.search(r"\bS(\d+(?:\.\d+)?)", code)
+            tm = re.search(r"\bT([01])\b", code)
+            tool = TOOL_MAP[int(tm.group(1))] if tm else cur_tool
+            if sm:
+                out.append("M104 S%d T%d" % (round(float(sm.group(1))), tool))
+            line = "M6 T%d" % tool
         elif _TOOL_CMD.match(code):
             line = _remap_tools(code).rstrip() + (
                 " ;" + line.split(";", 1)[1] if ";" in line else "")
