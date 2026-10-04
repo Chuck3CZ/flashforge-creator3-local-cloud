@@ -89,6 +89,23 @@ update_vendor 1
 # printer picture (Add printer dialog) + bed model/texture
 run cp "\"$HERE/assets/\"*.png" "\"$HERE/assets/\"*.stl" "\"$VENDOR_DIR/\""
 
+# Bed artwork: OrcaSlicer 2.4 loads bed_model/bed_texture only from the app
+# bundle, but honours absolute bed_custom_texture/bed_custom_model paths.
+if (( DRY_RUN )); then
+    echo "[dry-run] set bed_custom_texture/model -> $VENDOR_DIR"
+else
+    python3 - "$VENDOR_DIR" <<'PY2'
+import json, sys
+vd = sys.argv[1]
+p = vd + "/machine/FlashForge_Creator3.json"
+m = json.load(open(p))
+m["bed_custom_texture"] = vd + "/flashforge_creator3_buildplate_texture.png"
+m["bed_custom_model"] = vd + "/flashforge_creator3_buildplate_model.stl"
+json.dump(m, open(p, "w"), indent=4, ensure_ascii=False)
+print("  bed artwork wired (bed_custom_texture/model)")
+PY2
+fi
+
 # Wire the .gx converter into the Creator 3 process presets (absolute path,
 # system python so it works when OrcaSlicer is launched from the Dock).
 PP_CMD="/usr/bin/python3 \"$HERE/scripts/gx_converter.py\""

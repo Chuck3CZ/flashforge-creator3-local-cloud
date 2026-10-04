@@ -42,18 +42,6 @@
     "enable_prime_tower": "1",
     "prime_tower_width": "35",
     "prime_tower_brim_width": "3",
-    "flush_volumes_vector": [
-        "140",
-        "140",
-        "140",
-        "140"
-    ],
-    "flush_volumes_matrix": [
-        "0",
-        "140",
-        "140",
-        "0"
-    ],
     "ooze_prevention": "1",
     "standby_temperature_delta": "-40"
 }
