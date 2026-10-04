@@ -75,6 +75,7 @@ if [[ "$MODE" == "uninstall" ]]; then
     run rm -f "\"$VENDOR_DIR/machine/FlashForge_Creator3.json\"" \
               "\"$VENDOR_DIR/machine/FlashForge_Creator3_model.json\""
     run rm -f "\"$VENDOR_DIR/process/\"*Creator3*.json" "\"$VENDOR_DIR/filament/\"*Creator3*.json"
+    run rm -f "\"$VENDOR_DIR/FlashForge Creator 3_cover.png\"" "\"$VENDOR_DIR/\"flashforge_creator3_buildplate_*"
     echo "Done. Start OrcaSlicer."
     exit 0
 fi
@@ -85,6 +86,8 @@ run cp "\"$HERE/machine/FlashForge_Creator3.json\"" "\"$HERE/machine/FlashForge_
 run cp "\"$HERE/process/\"*Creator3*.json" "\"$VENDOR_DIR/process/\""
 run cp "\"$HERE/filament/\"*Creator3*.json" "\"$VENDOR_DIR/filament/\""
 update_vendor 1
+# printer picture (Add printer dialog) + bed model/texture
+run cp "\"$HERE/assets/\"*.png" "\"$HERE/assets/\"*.stl" "\"$VENDOR_DIR/\""
 
 # Wire the .gx converter into the Creator 3 process presets (absolute path,
 # system python so it works when OrcaSlicer is launched from the Dock).
