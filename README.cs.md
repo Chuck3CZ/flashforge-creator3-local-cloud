@@ -36,6 +36,7 @@ ukázal tři věci, které celý projekt umožňují:
 | [`docs/firmware-analysis.md`](docs/firmware-analysis.md) | Co je uvnitř firmwaru, jak se rozbaluje |
 | [`docs/cloud-protocol.md`](docs/cloud-protocol.md) | Reverzovaný cloudový protokol (register/status/update) |
 | [`docs/protocol-8899.md`](docs/protocol-8899.md) | Příkazy lokálního rozhraní na portu 8899 |
+| [`toocaa-laser/`](toocaa-laser/) | **ToocaaLaser** – ovládání laseru TOOCAA NOVA bez cloudu (Grbl_ESP32): webová aplikace, CLI v Pythonu, Wi-Fi most, simulátor, audit `.lbdev` |
 
 ## Rychlý start (izolovaná síť přes switch/USB-LAN)
 

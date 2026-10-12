@@ -39,6 +39,7 @@ that make this whole project possible:
 | [`docs/firmware-analysis.md`](docs/firmware-analysis.md) | What's inside the firmware, how to unpack it |
 | [`docs/cloud-protocol.md`](docs/cloud-protocol.md) | Reverse-engineered cloud protocol (register/status/update) |
 | [`docs/protocol-8899.md`](docs/protocol-8899.md) | Local port 8899 command reference |
+| [`toocaa-laser/`](toocaa-laser/) | **ToocaaLaser** – cloud-free control for the TOOCAA NOVA laser (Grbl_ESP32): web app, Python CLI, Wi-Fi bridge, simulator, `.lbdev` audit |
 
 ## Quick start (isolated network via switch / USB-LAN)
 
