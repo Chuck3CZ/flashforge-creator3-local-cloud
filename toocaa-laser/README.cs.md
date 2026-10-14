@@ -52,6 +52,8 @@ kódu TOOCAA Studia. Podrobnosti a zdroje: **[PROTOCOL.md](PROTOCOL.md)**.
 | [`bridge.py`](bridge.py) | Lokální most (WebSocket ↔ NOVA přes Wi-Fi/USB), který zároveň servíruje aplikaci offline |
 | [`PROTOCOL.md`](PROTOCOL.md) | Vše, co víme o protokolu NOVA (USB, Wi-Fi 8002, příkazy `FF`, profil), se zdroji |
 | [`lbdev_audit.py`](lbdev_audit.py) | Audit souboru `toocaa_nova.lbdev` **jen pro čtení** (JSON/XML, najde i makra kódovaná v base64) |
+| [`extension/`](extension/) | Rozšíření **ToocaaLaser Connect** (MV3): HTTP + WebSocket k NOVA, jen do lokální sítě |
+| [`tools/`](tools/) | [Studio sniffer](https://chuck3cz.github.io/ToocaaLaser/tools/sniffer.html) pro nahrání komunikace TOOCAA Studio ↔ NOVA a `sniff_analyze.py` |
 | [`grbl_sim.py`](grbl_sim.py) | Simulátor NOVA (Grbl_ESP32 1.3a, plocha A4, soft limity, check mód, alarmy) |
 | [`test_toocaa_laser.py`](test_toocaa_laser.py) | End-to-end testy proti simulátoru (`python3 -m unittest -v`) |
 
@@ -76,7 +78,13 @@ Stačí Python 3.9+ se standardní knihovnou. Pro USB z Pythonu je potřeba `pip
 
 - **USB:** Chrome/Edge na počítači, *Připojit* a vybrat port NOVA. Vše běží
   přímo v prohlížeči.
-- **Wi-Fi:** na počítači spusť `python3 bridge.py --port <IP NOVA>` (připojí se
+- **Wi-Fi (rozšíření, doporučeno):** nainstaluj malé rozšíření
+  [ToocaaLaser Connect](https://chuck3cz.github.io/ToocaaLaser/extension/) pro
+  Chrome/Edge (načíst rozbalené, asi minuta). V aplikaci zvol *Wi-Fi (rozšíření
+  prohlížeče)*, zadej IP NOVA a na jejím displeji potvrď **Confirm**. Dělá totéž
+  co rozšíření „TOOCAA Connect“ od TOOCAA, ale pouští spojení jen do domácí sítě
+  a jen pro tuhle aplikaci.
+- **Wi-Fi (Python):** na počítači spusť `python3 bridge.py --port <IP NOVA>` (připojí se
   na WebSocket NOVA na portu 8002, takže potvrď na displeji) a v aplikaci
   zvol *Wi-Fi přes lokální most*. Stránka z https (GitHub Pages) nesmí otevřít
   `ws://192.168.x.x` napřímo, ale `ws://localhost` ano. Most navíc servíruje
