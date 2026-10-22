@@ -15,7 +15,7 @@ NOVA quirks recorded from a real machine over USB (2026-10, firmware V1.0.2,
 see PROTOCOL.md) are on by default, `--stock-grbl` turns them off:
   * `?` is answered with the status report **and an extra `ok`**;
   * status reports carry 4 axes (X,Y,Z,A) and `Pn:XY`;
-  * `$G` -> error:3, `$#` -> error:1, `$J=` (jogging) -> error:3;
+  * `$G` -> error:3, `$#` -> error:1, `$J=` (jogging) and `$C` (check) -> error:3;
   * `FF F1` / `FF F2` / `FF R8` reply with one `FF xx ...` line and no `ok`
     (F1/F2 payload = base64 JSON).
 """
@@ -200,6 +200,8 @@ class Machine:
                     "[TLO:0.000]", "[PRB:0.000,0.000,0.000:0]", "ok"]
         if u == "$":
             return ["[HLP:$$ $+ $# $S $L $G $I $N $x=val $Nx=line $J=line $SLP $C $X $H $F $E=err ~ ! ? ctrl-x]", "ok"]
+        if u == "$C" and self.nova:
+            return ["error:3"]  # the NOVA has no $C check mode
         if u == "$C":
             if self.state == "Check" or self.check:
                 self.realtime("\x18")
@@ -275,6 +277,8 @@ class Machine:
                 else:
                     return ["error:20"]
             elif l == "M":
+                if v == 200:  # NOVA acceleration `M200 X.. Y..` (TOOCAA Studio)
+                    return ["ok"]
                 if v in (3, 4, 5, 8, 9, 2, 30, 7):
                     pass
                 else:
@@ -289,7 +293,9 @@ class Machine:
                 return ["error:20"]
         if moved and motion == 1 and not any(l == "F" for l, _ in words) and self.f <= 0:
             return ["error:22"]
-        if moved and not (0 <= target[0] <= self.w and 0 <= target[1] <= self.h):
+        # the NOVA travels 300 x 220 and $H leaves it slightly outside (pull-off ~ -7 mm)
+        lo, wx, hy = (-10.0, float(SETTINGS[130]), float(SETTINGS[131])) if self.nova else (0.0, self.w, self.h)
+        if moved and not (lo <= target[0] <= wx and lo <= target[1] <= hy):
             if self.check:
                 return ["error:15"]
             self.state = "Alarm"

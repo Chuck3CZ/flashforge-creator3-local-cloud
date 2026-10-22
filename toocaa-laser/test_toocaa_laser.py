@@ -96,6 +96,18 @@ class TestMotion(SimCase):
         self.assertEqual(n.wait_idle(5).mpos[:2], (7.0, 5.0))
         self.assertTrue(self.m.absolute)
 
+    def test_nova_jog_from_outside_after_home(self):
+        n = self.connect(motion=True)
+        self.m.pos = [-0.67, -7.02, 0.0]          # where $H leaves the real NOVA
+        n.jog(10, 0)                              # sideways is fine although Y < 0
+        n.jog(0, 5)                               # towards the bed is fine
+        with self.assertRaises(nova.NotAllowed):
+            n.jog(0, -5)                          # further out is refused
+
+    def test_nova_jog_uses_machine_travel(self):
+        n = self.connect(motion=True)
+        self.assertEqual(n.travel(), (300.0, 220.0))  # $130 / $131 of the real NOVA
+
     def test_nova_jog_outside_bed_refused_by_client(self):
         n = self.connect(motion=True)
         with self.assertRaises(nova.NotAllowed):
@@ -182,6 +194,18 @@ class TestStreaming(SimCase):
         self.assertEqual(self.m.burn, [])
         self.assertEqual(self.m.pos[:2], [0.0, 0.0])
         self.assertEqual(n.status().state, "Idle")
+
+    def test_check_mode_stock_grbl_uses_dollar_c(self):
+        self.m.nova = False  # stock Grbl: real $C check mode on the controller
+        n = self.connect()
+        self.assertEqual(n.stream(self.JOB, check_only=True), len(self.JOB))
+        self.assertEqual(n.status().state, "Idle")
+
+    def test_nova_has_no_dollar_c(self):
+        n = self.connect()
+        with self.assertRaises(nova.GrblError) as cm:
+            n._toggle_check_mode()
+        self.assertEqual(cm.exception.code, 3)
 
     def test_check_mode_reports_bad_line(self):
         n = self.connect()
